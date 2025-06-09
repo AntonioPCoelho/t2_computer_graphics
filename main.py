@@ -4,8 +4,8 @@ from OpenGL.GL import *
 
 import sys
 import time
+import math
 import os
-import math # para mover a camera
 
 from Objeto3D import *
 
@@ -13,15 +13,20 @@ o: Objeto3D
 tempo_antes = time.time()
 soma_dt = 0
 
-eyeO = [0.0, 2.0, 8.0]  
-focalPoint = [0.0, 0.0, 0.0]  
-vup = [0.0, 1.0, 2.0]  
+eyeO = [0.0, 2.0, 8.0]
+focalPoint = [0.0, 0.0, 0.0]
+vup = [0.0, 1.0, 2.0]
 
 CAM_STEP = 0.5
-CAM_ROT_SPEED = 0.5 # Velocidade de rotacao da camera
+CAMERA_ROTATION_SPEED = 0.5
 
-modo_particulas = False
-modo_reconstruir = False # Estado novo para a reconstrucao da cabeca
+# Novas variáveis para controle de animação
+current_animation_mode = "NORMAL" # Estados: "NORMAL", "PAUSED", "FAST_FORWARD", "REWINDING"
+animation_speed_multiplier = 1.0 #
+
+# As flags modo_particulas e modo_reconstrucao se tornarão redundantes com estado_particulas em Objeto3D
+# Mas as manteremos por enquanto para compatibilidade com o código existente na Animacao,
+# embora o controle principal passe a ser via o.estado_particulas
 
 def AtualizaCamera():
     glMatrixMode(GL_MODELVIEW)
@@ -29,6 +34,13 @@ def AtualizaCamera():
     gluLookAt(eyeO[0], eyeO[1], eyeO[2],
               focalPoint[0], focalPoint[1], focalPoint[2],
               vup[0],   vup[1],   vup[2])
+
+def reset_to_initial_state():
+    global o, current_animation_mode, animation_speed_multiplier
+    o.ResetState() # Chama o novo método em Objeto3D para resetar o estado do objeto
+    current_animation_mode = "PAUSED" # Após o reset, pausa a animação
+    animation_speed_multiplier = 1.0 # Reseta a velocidade
+    print("Estado resetado para inicial. Animação Pausada.")
 
 
 def init():
@@ -42,82 +54,55 @@ def init():
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
     o = Objeto3D()
-    o.LoadFile('Human_Head.obj')
+    o.LoadFile('Human_Head.obj') # Certifique-se de que este arquivo existe
 
     DefineLuz()
     PosicUser()
+    # No início, o objeto deve estar completo, então resetamos o estado
+    reset_to_initial_state()
 
 
 def DefineLuz():
-    # Define cores para um objeto dourado
     luz_ambiente = [0.4, 0.4, 0.4]
     luz_difusa = [0.7, 0.7, 0.7]
     luz_especular = [0.9, 0.9, 0.9]
-    posicao_luz = [2.0, 3.0, 0.0]  # Posicao da Luz
+    posicao_luz = [2.0, 3.0, 0.0]
     especularidade = [1.0, 1.0, 1.0]
 
-    # ****************  Fonte de Luz 0
-
     glEnable(GL_COLOR_MATERIAL)
-
-    #Habilita o uso de iluminacao
     glEnable(GL_LIGHTING)
-
-    #Ativa o uso da luz ambiente
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT, luz_ambiente)
-    # Define os parametros da luz numero Zero
     glLightfv(GL_LIGHT0, GL_AMBIENT, luz_ambiente)
     glLightfv(GL_LIGHT0, GL_DIFFUSE, luz_difusa)
     glLightfv(GL_LIGHT0, GL_SPECULAR, luz_especular)
     glLightfv(GL_LIGHT0, GL_POSITION, posicao_luz)
     glEnable(GL_LIGHT0)
-
-    # Ativa o "Color Tracking"
     glEnable(GL_COLOR_MATERIAL)
-
-    # Define a reflectancia do material
     glMaterialfv(GL_FRONT, GL_SPECULAR, especularidade)
-
-    # Define a concentracao do brilho.
-    # Quanto maior o valor do Segundo parametro, mais
-    # concentrado sera o brilho. (Valores validos: de 0 a 128)
     glMateriali(GL_FRONT, GL_SHININESS, 51)
 
 def PosicUser():
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-
-    # Configura a matriz da projeção perspectiva (FOV, proporção da tela, distância do mínimo antes do clipping, distância máxima antes do clipping
-    # https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluPerspective.xml
-    gluPerspective(60, 16/9, 0.01, 50)  # Projecao perspectiva
+    gluPerspective(60, 16/9, 0.01, 50)
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
-
-    #Especifica a matriz de transformação da visualização
-    # As três primeiras variáveis especificam a posição do observador nos eixos x, y e z
-    # As três próximas especificam o ponto de foco nos eixos x, y e z
-    # As três últimas especificam o vetor up
-    # https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluLookAt.xml
     AtualizaCamera()
 
 def reshape(w, h):
     if h == 0:
         h = 1
     aspect = w / h
-
     glViewport(0, 0, w, h)
-
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     gluPerspective(60.0, aspect, 0.01, 50.0)
-
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
-    # câmera mais baixa e centralizada no objeto
     AtualizaCamera()
 
 def DesenhaLadrilho():
-    glColor3f(0.5, 0.5, 0.5)  # desenha QUAD preenchido
+    glColor3f(0.5, 0.5, 0.5)
     glBegin(GL_QUADS)
     glNormal3f(0, 1, 0)
     glVertex3f(-0.5, 0.0, -0.5)
@@ -126,7 +111,7 @@ def DesenhaLadrilho():
     glVertex3f(0.5, 0.0, -0.5)
     glEnd()
 
-    glColor3f(1, 1, 1)  # desenha a borda da QUAD
+    glColor3f(1, 1, 1)
     glBegin(GL_LINE_STRIP)
     glNormal3f(0, 1, 0)
     glVertex3f(-0.5, 0.0, -0.5)
@@ -160,44 +145,53 @@ def DesenhaCubo():
     glutSolidCone(1, 1, 4, 4)
     glPopMatrix()
 
-# Func para mover a camera ao redor do objeto
-def moveCamera(dt):
+def OrbitaCamera(dt):
     global eyeO, focalPoint
 
-    # distancia da camera ao ponto focal
     dist_x = eyeO[0] - focalPoint[0]
     dist_z = eyeO[2] - focalPoint[2]
     radius = math.sqrt(dist_x**2 + dist_z**2)
     current_angle = math.atan2(dist_z, dist_x)
 
-    novo_angle = current_angle + CAM_ROT_SPEED * dt
+    new_angle = current_angle + CAMERA_ROTATION_SPEED * dt
 
-    eyeO[0] = focalPoint[0] + radius * math.cos(novo_angle)
-    eyeO[2] = focalPoint[2] + radius * math.sin(novo_angle)
-
-    eyeO[1] = eyeO[1] * 0.99 + (focalPoint[1] + 2.0) * 0.01 # move bem devagar para uma altura especifica
+    eyeO[0] = focalPoint[0] + radius * math.cos(new_angle)
+    eyeO[2] = focalPoint[2] + radius * math.sin(new_angle)
 
     AtualizaCamera()
 
-# Função chamada constantemente (idle) para atualizar a animação
 def Animacao():
-    global soma_dt, tempo_antes, modo_reconstrucao
+    global soma_dt, tempo_antes, modo_reconstrucao, current_animation_mode, animation_speed_multiplier
 
     tempo_agora = time.time()
     delta_time = tempo_agora - tempo_antes
     tempo_antes = tempo_agora
 
-    soma_dt += delta_time
+    # Ajusta o delta_time com base no multiplicador de velocidade
+    effective_dt = delta_time * animation_speed_multiplier
 
-    if soma_dt > 1.0 / 30:  # Aproximadamente 30 quadros por segundo
+    soma_dt += effective_dt
+
+    if soma_dt > 1.0 / 30: # Aproximadamente 30 quadros por segundo
         soma_dt = 0
-        if o.estado_particulas == 1: # Se estiver caindo
-            o.AtualizaParticulas(delta_time) # <--- AQUI! Passando delta_time
-        elif o.estado_particulas == 2: # Se estiver reconstruindo
-            o.AtualizaParticulas(delta_time) # <--- E AQUI! Passando delta_time
-            moveCamera(delta_time) # Move a câmera enquanto reconstrói
 
-        glutPostRedisplay()
+        if current_animation_mode == "PAUSED":
+            pass # Não faz nada, a animação está pausada
+        elif current_animation_mode == "REWINDING":
+            # No modo REWINDING, a ação já foi tomada pela função reset_to_initial_state() no teclado.
+            # Aqui, apenas garantimos que a tela seja redesenhada para refletir o estado resetado.
+            glutPostRedisplay()
+            return # Sai da função para evitar processamento adicional de movimento
+        else: # "NORMAL" ou "FAST_FORWARD"
+            if o.estado_particulas == 1: # Caindo
+                o.AtualizaParticulas(effective_dt)
+            elif o.estado_particulas == 2: # Reconstruindo
+                o.AtualizaParticulas(effective_dt)
+                OrbitaCamera(effective_dt)
+            # Se o.estado_particulas for 0 (objeto inteiro), nenhuma atualização de partícula é feita aqui,
+            # mas você pode adicionar outras animações para o objeto inteiro se desejar.
+
+            glutPostRedisplay()
 
 def desenha():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -205,79 +199,97 @@ def desenha():
     glMatrixMode(GL_MODELVIEW)
 
     DesenhaPiso()
-    if o.estado_particulas == 1 or o.estado_particulas == 2: # Se estiver caindo ou reconstruindo
+    # Desenha o objeto ou as partículas com base no estado do objeto
+    if o.estado_particulas == 0: # Objeto inteiro
+        o.DesenhaVertices() # Desenha o objeto completo (cabeça)
+    elif o.estado_particulas == 1 or o.estado_particulas == 2: # Caindo ou Reconstruindo
         o.DesenhaParticulas()
-    else: # Se nao estiver em modo particula, desenha os v do obj
-        o.DesenhaVertices()
     glutSwapBuffers()
     pass
 
 def teclado(key, x, y):
-    global eyeO, focalPoint, vup, modo_particulas, modo_reconstruir
+    global eyeO, focalPoint, vup, current_animation_mode, animation_speed_multiplier
+
     mod = glutGetModifiers()
     step = CAM_STEP * (-1 if (mod & GLUT_ACTIVE_SHIFT) else 1)
-    if key == b'\x1b':  # ESC 
-        os._exit(0)  # Fecha o programa
-    elif key == b'1':    eyeO[0]   += step
+    if key == b'1':    eyeO[0]   += step
     elif key == b'2':  eyeO[1]   += step
     elif key == b'3':  eyeO[2]   += step
     elif key == b'4':  focalPoint[0]+= step
     elif key == b'5':  focalPoint[1]+= step
     elif key == b'6':  focalPoint[2]+= step
     elif key == b'7':  vup[0], vup[1] = vup[1], -vup[0]
-    
-    elif key == b'!': eyeO[0]   -= CAM_STEP  
-    elif key == b'@': eyeO[1]   -= CAM_STEP  
-    elif key == b'#': eyeO[2]   -= CAM_STEP  
-    elif key == b'$': focalPoint[0] -= CAM_STEP  
-    elif key == b'%': focalPoint[1] -= CAM_STEP  
-    elif key == b'^': focalPoint[2] -= CAM_STEP  
-    elif key == b'&': vup[0], vup[1] = -vup[1], vup[0]
-    
-    elif key == b'p':
-        o.AtivarParticulas() # Inicia a queda
-        modo_particulas = True
-        modo_reconstruir = False
-    elif key == b'r': # Nova tecla 'r' para reconstruir
-        o.ReconstruirParticulas()
-        modo_reconstruir = True
-        modo_particulas = False
-    
-    AtualizaCamera()
-    #o.rotation = (1, 0, 0, o.rotation[3] + 2)    
 
+    elif key == b'!': eyeO[0]   -= CAM_STEP
+    elif key == b'@': eyeO[1]   -= CAM_STEP
+    elif key == b'#': eyeO[2]   -= CAM_STEP
+    elif key == b'$': focalPoint[0] -= CAM_STEP
+    elif key == b'%': focalPoint[1] -= CAM_STEP
+    elif key == b'^': focalPoint[2] -= CAM_STEP
+    elif key == b'&': vup[0], vup[1] = -vup[1], vup[0]
+
+    elif key == b'\x1b': # ESC key
+        glutLeaveMainLoop() # Sai do loop principal do GLUT
+        print("Saindo da aplicação.")
+
+    # Controles da Animação
+    elif key == b' ': # Espaço: Togglar Play/Pause
+        if current_animation_mode == "PAUSED":
+            current_animation_mode = "NORMAL"
+        else:
+            current_animation_mode = "PAUSED"
+        animation_speed_multiplier = 1.0 # Reseta a velocidade para normal ao pausar/despausar
+        print(f"Modo de animação: {current_animation_mode}")
+
+    elif key == b'[': # Rewind (voltar ao estado inicial)
+        current_animation_mode = "REWINDING"
+        reset_to_initial_state() # Chama a função para resetar
+        print("Modo de animação: REWIND (resetado para o estado inicial)")
+
+    elif key == b']': # Fast Forward
+        current_animation_mode = "FAST_FORWARD"
+        animation_speed_multiplier = 3.0 # Exemplo: 3x velocidade. Ajuste conforme necessário.
+        print(f"Modo de animação: {current_animation_mode} ({animation_speed_multiplier}x velocidade)")
+
+    elif key == b'\\': # Backslash: Resetar velocidade para normal
+        current_animation_mode = "NORMAL"
+        animation_speed_multiplier = 1.0
+        print("Modo de animação: NORMAL")
+
+
+    # Controles específicos da animação de cabeça (mantidos, mas influenciados pelos novos modos)
+    elif key == b'p': # Ativar partículas (destruir cabeça)
+        o.AtivarParticulas()
+        current_animation_mode = "NORMAL" # Começa a cair em velocidade normal
+        animation_speed_multiplier = 1.0
+        print("Estado da cabeça: Caindo")
+
+    elif key == b'r': # Reconstruir cabeça
+        o.ReconstruirParticulas()
+        current_animation_mode = "NORMAL" # Começa a reconstruir em velocidade normal
+        animation_speed_multiplier = 1.0
+        print("Estado da cabeça: Reconstruindo")
+
+
+    AtualizaCamera()
     glutPostRedisplay()
     pass
 
 def main():
 
     glutInit(sys.argv)
-
-    # Define o modelo de operacao da GLUT
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH)
-
-    # Especifica o tamnho inicial em pixels da janela GLUT
     glutInitWindowSize(640, 480)
-
-    # Especifica a posição de início da janela
     glutInitWindowPosition(100, 100)
-
-    # Cria a janela passando o título da mesma como argumento
     glutCreateWindow(b'Computacao Grafica - 3D')
 
-    # Função responsável por fazer as inicializações
     init()
 
-    # Registra a funcao callback de redesenho da janela de visualizacao
     glutDisplayFunc(desenha)
-
-    # Registra a funcao callback para tratamento das teclas ASCII
     glutKeyboardFunc(teclado)
-
     glutIdleFunc(Animacao)
 
     try:
-        # Inicia o processamento e aguarda interacoes do usuario
         glutMainLoop()
     except SystemExit:
         pass
