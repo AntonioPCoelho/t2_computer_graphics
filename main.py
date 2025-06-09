@@ -145,21 +145,6 @@ def DesenhaCubo():
     glutSolidCone(1, 1, 4, 4)
     glPopMatrix()
 
-def OrbitaCamera(dt):
-    global eyeO, focalPoint
-
-    dist_x = eyeO[0] - focalPoint[0]
-    dist_z = eyeO[2] - focalPoint[2]
-    radius = math.sqrt(dist_x**2 + dist_z**2)
-    current_angle = math.atan2(dist_z, dist_x)
-
-    new_angle = current_angle + CAMERA_ROTATION_SPEED * dt
-
-    eyeO[0] = focalPoint[0] + radius * math.cos(new_angle)
-    eyeO[2] = focalPoint[2] + radius * math.sin(new_angle)
-
-    AtualizaCamera()
-
 def Animacao():
     global soma_dt, tempo_antes, modo_reconstrucao, current_animation_mode, animation_speed_multiplier
 
@@ -187,7 +172,6 @@ def Animacao():
                 o.AtualizaParticulas(effective_dt)
             elif o.estado_particulas == 2: # Reconstruindo
                 o.AtualizaParticulas(effective_dt)
-                OrbitaCamera(effective_dt)
             # Se o.estado_particulas for 0 (objeto inteiro), nenhuma atualização de partícula é feita aqui,
             # mas você pode adicionar outras animações para o objeto inteiro se desejar.
 
