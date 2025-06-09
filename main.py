@@ -4,6 +4,8 @@ from OpenGL.GL import *
 
 import sys
 import time
+import os
+import math # para mover a camera
 
 from Objeto3D import *
 
@@ -16,8 +18,10 @@ focalPoint = [0.0, 0.0, 0.0]
 vup = [0.0, 1.0, 2.0]  
 
 CAM_STEP = 0.5
+CAM_ROT_SPEED = 0.5 # Velocidade de rotacao da camera
 
 modo_particulas = False
+modo_reconstruir = False # Estado novo para a reconstrucao da cabeca
 
 def AtualizaCamera():
     glMatrixMode(GL_MODELVIEW)
@@ -49,19 +53,19 @@ def DefineLuz():
     luz_ambiente = [0.4, 0.4, 0.4]
     luz_difusa = [0.7, 0.7, 0.7]
     luz_especular = [0.9, 0.9, 0.9]
-    posicao_luz = [2.0, 3.0, 0.0]  # PosiÃ§Ã£o da Luz
+    posicao_luz = [2.0, 3.0, 0.0]  # Posicao da Luz
     especularidade = [1.0, 1.0, 1.0]
 
     # ****************  Fonte de Luz 0
 
     glEnable(GL_COLOR_MATERIAL)
 
-    #Habilita o uso de iluminaÃ§Ã£o
+    #Habilita o uso de iluminacao
     glEnable(GL_LIGHTING)
 
     #Ativa o uso da luz ambiente
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT, luz_ambiente)
-    # Define os parametros da luz nÃºmero Zero
+    # Define os parametros da luz numero Zero
     glLightfv(GL_LIGHT0, GL_AMBIENT, luz_ambiente)
     glLightfv(GL_LIGHT0, GL_DIFFUSE, luz_difusa)
     glLightfv(GL_LIGHT0, GL_SPECULAR, luz_especular)
@@ -74,9 +78,9 @@ def DefineLuz():
     # Define a reflectancia do material
     glMaterialfv(GL_FRONT, GL_SPECULAR, especularidade)
 
-    # Define a concentraÃ§Ã£oo do brilho.
+    # Define a concentracao do brilho.
     # Quanto maior o valor do Segundo parametro, mais
-    # concentrado serÃ¡ o brilho. (Valores vÃ¡lidos: de 0 a 128)
+    # concentrado sera o brilho. (Valores validos: de 0 a 128)
     glMateriali(GL_FRONT, GL_SHININESS, 51)
 
 def PosicUser():
@@ -156,22 +160,43 @@ def DesenhaCubo():
     glutSolidCone(1, 1, 4, 4)
     glPopMatrix()
 
+# Func para mover a camera ao redor do objeto
+def moveCamera(dt):
+    global eyeO, focalPoint
+
+    # distancia da camera ao ponto focal
+    dist_x = eyeO[0] - focalPoint[0]
+    dist_z = eyeO[2] - focalPoint[2]
+    radius = math.sqrt(dist_x**2 + dist_z**2)
+    current_angle = math.atan2(dist_z, dist_x)
+
+    novo_angle = current_angle + CAM_ROT_SPEED * dt
+
+    eyeO[0] = focalPoint[0] + radius * math.cos(novo_angle)
+    eyeO[2] = focalPoint[2] + radius * math.sin(novo_angle)
+
+    eyeO[1] = eyeO[1] * 0.99 + (focalPoint[1] + 2.0) * 0.01 # move bem devagar para uma altura especifica
+
+    AtualizaCamera()
+
 # Função chamada constantemente (idle) para atualizar a animação
 def Animacao():
-    global soma_dt, tempo_antes
+    global soma_dt, tempo_antes, modo_reconstrucao
 
     tempo_agora = time.time()
     delta_time = tempo_agora - tempo_antes
     tempo_antes = tempo_agora
 
     soma_dt += delta_time
-    
+
     if soma_dt > 1.0 / 30:  # Aproximadamente 30 quadros por segundo
         soma_dt = 0
-        if modo_particulas:
-            o.AtualizaParticulas()
-        else:
-            o.ProximaPos()      
+        if o.estado_particulas == 1: # Se estiver caindo
+            o.AtualizaParticulas(delta_time) # <--- AQUI! Passando delta_time
+        elif o.estado_particulas == 2: # Se estiver reconstruindo
+            o.AtualizaParticulas(delta_time) # <--- E AQUI! Passando delta_time
+            moveCamera(delta_time) # Move a câmera enquanto reconstrói
+
         glutPostRedisplay()
 
 def desenha():
@@ -180,18 +205,20 @@ def desenha():
     glMatrixMode(GL_MODELVIEW)
 
     DesenhaPiso()
-    if modo_particulas:
+    if o.estado_particulas == 1 or o.estado_particulas == 2: # Se estiver caindo ou reconstruindo
         o.DesenhaParticulas()
-    else:
+    else: # Se nao estiver em modo particula, desenha os v do obj
         o.DesenhaVertices()
     glutSwapBuffers()
     pass
 
 def teclado(key, x, y):
-    global eyeO, focalPoint, vup, modo_particulas
+    global eyeO, focalPoint, vup, modo_particulas, modo_reconstruir
     mod = glutGetModifiers()
     step = CAM_STEP * (-1 if (mod & GLUT_ACTIVE_SHIFT) else 1)
-    if key == b'1':    eyeO[0]   += step
+    if key == b'\x1b':  # ESC 
+        os._exit(0)  # Fecha o programa
+    elif key == b'1':    eyeO[0]   += step
     elif key == b'2':  eyeO[1]   += step
     elif key == b'3':  eyeO[2]   += step
     elif key == b'4':  focalPoint[0]+= step
@@ -207,9 +234,14 @@ def teclado(key, x, y):
     elif key == b'^': focalPoint[2] -= CAM_STEP  
     elif key == b'&': vup[0], vup[1] = -vup[1], vup[0]
     
-    elif key == b'p': 
+    elif key == b'p':
+        o.AtivarParticulas() # Inicia a queda
         modo_particulas = True
-        o.AtivarParticulas()
+        modo_reconstruir = False
+    elif key == b'r': # Nova tecla 'r' para reconstruir
+        o.ReconstruirParticulas()
+        modo_reconstruir = True
+        modo_particulas = False
     
     AtualizaCamera()
     #o.rotation = (1, 0, 0, o.rotation[3] + 2)    
