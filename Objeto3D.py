@@ -15,6 +15,7 @@ class Objeto3D:
         self.radius   = []
         self.position = Ponto(0,0,0)
         self.rotation = (0,0,0,0)
+        self.particulas = []
         pass
 
     def LoadFile(self, file:str):
@@ -111,6 +112,47 @@ class Objeto3D:
 
             self.vertices[i].x = x
             self.vertices[i].z = z
+            
+    def AtivarParticulas(self):
+        self.particulas = [Particula(v) for v in self.vertices]
+        
+    def AtualizaParticulas(self):
+        GRAVIDADE = -9.8
+        dt = 1/30
+
+        for p in self.particulas:
+            if not p.ativa:
+                continue
+
+            # Aplicar gravidade
+            p.vel[1] += GRAVIDADE * dt
+
+            # Atualizar posição
+            for i in range(3):
+                p.pos[i] += p.vel[i] * dt
+
+            # Colisão com o chão (y = -1.0)
+            if p.pos[1] <= -1.0:
+                p.pos[1] = -1.0
+                p.vel[1] *= -0.5  # quique
+                if abs(p.vel[1]) < 0.1:
+                    p.ativa = False
+                    p.vel = [0.0, 0.0, 0.0]
+                    
+    def DesenhaParticulas(self):
+        glColor3f(0, 0, 0)
+        glPointSize(6)
+        glBegin(GL_POINTS)
+        for p in self.particulas:
+            glVertex3f(p.pos[0], p.pos[1], p.pos[2])
+        glEnd()
+
+
+class Particula:
+    def __init__(self, ponto):
+        self.pos = [ponto.x, ponto.y, ponto.z]
+        self.vel = [random.uniform(-1, 1), random.uniform(2, 5), random.uniform(-1, 1)]
+        self.ativa = True
 
 
 

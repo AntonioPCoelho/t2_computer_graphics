@@ -17,6 +17,8 @@ vup = [0.0, 1.0, 2.0]
 
 CAM_STEP = 0.5
 
+modo_particulas = False
+
 def AtualizaCamera():
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
@@ -163,11 +165,13 @@ def Animacao():
     tempo_antes = tempo_agora
 
     soma_dt += delta_time
-
+    
     if soma_dt > 1.0 / 30:  # Aproximadamente 30 quadros por segundo
         soma_dt = 0
-        
-        o.ProximaPos()
+        if modo_particulas:
+            o.AtualizaParticulas()
+        else:
+            o.ProximaPos()      
         glutPostRedisplay()
 
 def desenha():
@@ -176,16 +180,15 @@ def desenha():
     glMatrixMode(GL_MODELVIEW)
 
     DesenhaPiso()
-    #DesenhaCubo()    
-    # o.Desenha()
-    # o.DesenhaWireframe()
-    o.DesenhaVertices()
-
+    if modo_particulas:
+        o.DesenhaParticulas()
+    else:
+        o.DesenhaVertices()
     glutSwapBuffers()
     pass
 
 def teclado(key, x, y):
-    global eyeO, focalPoint, vup
+    global eyeO, focalPoint, vup, modo_particulas
     mod = glutGetModifiers()
     step = CAM_STEP * (-1 if (mod & GLUT_ACTIVE_SHIFT) else 1)
     if key == b'1':    eyeO[0]   += step
@@ -203,7 +206,11 @@ def teclado(key, x, y):
     elif key == b'%': focalPoint[1] -= CAM_STEP  
     elif key == b'^': focalPoint[2] -= CAM_STEP  
     elif key == b'&': vup[0], vup[1] = -vup[1], vup[0]
- 
+    
+    elif key == b'p': 
+        modo_particulas = True
+        o.AtivarParticulas()
+    
     AtualizaCamera()
     #o.rotation = (1, 0, 0, o.rotation[3] + 2)    
 
