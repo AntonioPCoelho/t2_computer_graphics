@@ -2,13 +2,28 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from OpenGL.GL import *
 
+import sys
 import time
 
 from Objeto3D import *
 
-o:Objeto3D
+o: Objeto3D
 tempo_antes = time.time()
 soma_dt = 0
+
+eyeO = [0.0, 2.0, 8.0]  
+focalPoint = [0.0, 0.0, 0.0]  
+vup = [0.0, 1.0, 2.0]  
+
+CAM_STEP = 0.5
+
+def AtualizaCamera():
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+    gluLookAt(eyeO[0], eyeO[1], eyeO[2],
+              focalPoint[0], focalPoint[1], focalPoint[2],
+              vup[0],   vup[1],   vup[2])
+
 
 def init():
     global o
@@ -77,7 +92,23 @@ def PosicUser():
     # As três próximas especificam o ponto de foco nos eixos x, y e z
     # As três últimas especificam o vetor up
     # https://registry.khronos.org/OpenGL-Refpages/gl2.1/xhtml/gluLookAt.xml
-    gluLookAt(-2, 6, -8, 0, 0, 0, 0, 1.0, 0)
+    AtualizaCamera()
+
+def reshape(w, h):
+    if h == 0:
+        h = 1
+    aspect = w / h
+
+    glViewport(0, 0, w, h)
+
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    gluPerspective(60.0, aspect, 0.01, 50.0)
+
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+    # câmera mais baixa e centralizada no objeto
+    AtualizaCamera()
 
 def DesenhaLadrilho():
     glColor3f(0.5, 0.5, 0.5)  # desenha QUAD preenchido
@@ -154,7 +185,27 @@ def desenha():
     pass
 
 def teclado(key, x, y):
-    o.rotation = (1, 0, 0, o.rotation[3] + 2)    
+    global eyeO, focalPoint, vup
+    mod = glutGetModifiers()
+    step = CAM_STEP * (-1 if (mod & GLUT_ACTIVE_SHIFT) else 1)
+    if key == b'1':    eyeO[0]   += step
+    elif key == b'2':  eyeO[1]   += step
+    elif key == b'3':  eyeO[2]   += step
+    elif key == b'4':  focalPoint[0]+= step
+    elif key == b'5':  focalPoint[1]+= step
+    elif key == b'6':  focalPoint[2]+= step
+    elif key == b'7':  vup[0], vup[1] = vup[1], -vup[0]
+    
+    elif key == b'!': eyeO[0]   -= CAM_STEP  
+    elif key == b'@': eyeO[1]   -= CAM_STEP  
+    elif key == b'#': eyeO[2]   -= CAM_STEP  
+    elif key == b'$': focalPoint[0] -= CAM_STEP  
+    elif key == b'%': focalPoint[1] -= CAM_STEP  
+    elif key == b'^': focalPoint[2] -= CAM_STEP  
+    elif key == b'&': vup[0], vup[1] = -vup[1], vup[0]
+ 
+    AtualizaCamera()
+    #o.rotation = (1, 0, 0, o.rotation[3] + 2)    
 
     glutPostRedisplay()
     pass
