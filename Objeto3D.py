@@ -139,8 +139,7 @@ class Objeto3D:
         self.estado_particulas = 2 # Define o estado como reconstruindo
         for i, p in enumerate(self.particulas):
             p.ativa = True # Ativa todas as partículas para a reconstrução
-            # No modo reconstrução, a velocidade é menos relevante,
-            # o movimento é controlado pela interpolação para o ponto original.
+            p.vel = [0, 0, 0] # Zera a velocidade para o início da simulação de reconstrução
 
     def ResetState(self): # Novo método para resetar o objeto para seu estado inicial
         self.estado_particulas = 0 # Define o estado como objeto inteiro
@@ -164,90 +163,75 @@ class Objeto3D:
             for p in self.particulas:
                 if not p.ativa:
                     continue
-
                 # Aplicar gravidade
                 p.vel[1] += GRAVIDADE * dt
-
                 # Atualizar posição
                 for i in range(3):
                     p.pos[i] += p.vel[i] * dt
-
                 # Colisão com o chão (y = -1.0)
                 if p.pos[1] <= -1.0:
                     p.pos[1] = -1.0
                     p.vel[1] *= -0.5  # quique
-                    # Limiar menor para a desativação, para que quiquem mais antes de parar
                     if abs(p.vel[1]) < 0.05:
                         p.ativa = False
                         p.vel = [0.0, 0.0, 0.0]
-        elif self.estado_particulas == 2: # Reconstruindo (Tornado invertido)
-            reconstruction_speed = 0.05 # Ajuste a velocidade da reconstrução
-            spiral_tightness = 5.0 # Ajuste a "apertura" da espiral
-            spiral_height_factor = 2.0 # Ajuste o quão rápido a partícula sobe no Y
 
-            # Verifique se todas as partículas atingiram seu destino
+        elif self.estado_particulas == 2: # Reconstruindo (com interpolação corrigida)
+            # --- Parâmetros para ajustar o efeito ---
+            reconstruction_speed = 0.05  # Velocidade da interpolação (mais alto = mais rápido)
+            spiral_speed = 5.0         # Velocidade da rotação da espiral
+
             all_reconstructed = True
-
             for i, p in enumerate(self.particulas):
-                if not p.ativa: # Se a partícula já foi reconstruída e desativada
+                if not p.ativa:
                     continue
 
                 target_pos = self.original_vertices_positions[i]
-                current_pos = Ponto(p.pos[0], p.pos[1], p.pos[2])
+                current_pos_vec = p.pos
 
-                # Vetor do alvo para a posição atual
-                direction = Ponto(target_pos.x - current_pos.x,
-                                  target_pos.y - current_pos.y,
-                                  target_pos.z - current_pos.z)
+                distance = math.sqrt((target_pos.x - current_pos_vec[0])**2 +
+                                     (target_pos.y - current_pos_vec[1])**2 +
+                                     (target_pos.z - current_pos_vec[2])**2)
 
-                distance = math.sqrt(direction.x**2 + direction.y**2 + direction.z**2)
+                if distance < 0.01:
+                    p.pos = [target_pos.x, target_pos.y, target_pos.z]
+                    p.ativa = False
+                    continue
 
-                if distance > 0.01: # Se não chegou muito perto do alvo
-                    all_reconstructed = False # Ainda há partículas para reconstruir
+                all_reconstructed = False
 
-                    # Adicionar um componente espiral (tornado invertido)
-                    angle = math.atan2(current_pos.z, current_pos.x) # Ângulo atual da partícula
-                    
-                    # Interpolar a posição para o alvo, adicionando o movimento em espiral
-                    # O raio e o ângulo do espiral devem convergir para o do target_pos também
-                    target_angle = math.atan2(target_pos.z, target_pos.x)
-                    target_r = math.hypot(target_pos.x, target_pos.z)
-                    current_r = math.hypot(current_pos.x, current_pos.z)
+                # --- Interpolação de Altura (Y) e Raio (XZ) ---
+                # Esta parte garante que a forma geral (altura/largura) será correta.
+                p.pos[1] = p.pos[1] * (1 - reconstruction_speed) + target_pos.y * reconstruction_speed
 
+                current_r = math.hypot(current_pos_vec[0], current_pos_vec[2])
+                target_r = math.hypot(target_pos.x, target_pos.z)
+                new_r = current_r * (1 - reconstruction_speed) + target_r * reconstruction_speed
 
-                    # Interpolando o raio (distância ao centro XZ)
-                    new_r = current_r * (1 - reconstruction_speed) + target_r * reconstruction_speed
-                    
-                    # Interpolando o ângulo (para girar em direção ao ângulo alvo)
-                    # Adiciona um componente de espiral extra
-                    new_angle_spiral = angle + dt * spiral_tightness
-                    new_angle_interpolated = (angle * (1 - reconstruction_speed) + target_angle * reconstruction_speed) + dt * spiral_tightness
+                # --- Cálculo de Ângulo (a correção principal) ---
+                current_angle = math.atan2(current_pos_vec[2], current_pos_vec[0])
+                target_angle = math.atan2(target_pos.z, target_pos.x)
 
+                # Calcula a menor distância entre os ângulos (para evitar que ele gire no sentido errado)
+                angle_diff = (target_angle - current_angle + math.pi) % (2 * math.pi) - math.pi
+                
+                # Movimento para corrigir a direção
+                angle_correction = angle_diff * reconstruction_speed
+                # Movimento constante da espiral
+                angle_spiral = dt * spiral_speed
+                
+                # O novo ângulo combina a correção com a espiral
+                new_angle = current_angle + angle_correction + angle_spiral
 
-                    # Recalcular X e Z baseados no novo raio e ângulo interpolado
-                    p.pos[0] = new_r * math.cos(new_angle_interpolated)
-                    p.pos[2] = new_r * math.sin(new_angle_interpolated)
+                # --- Atualiza a posição XZ com base no novo raio e ângulo ---
+                p.pos[0] = new_r * math.cos(new_angle)
+                p.pos[2] = new_r * math.sin(new_angle)
 
-
-                    # Interpolando a altura Y em direção ao alvo, com um fator de altura espiral
-                    p.pos[1] = p.pos[1] * (1 - reconstruction_speed) + target_pos.y * reconstruction_speed * spiral_height_factor
-
-                    # Garantir que se movem em direção ao alvo final suavemente (misturando com a interpolação anterior)
-                    # p.pos[0] += (target_pos.x - p.pos[0]) * reconstruction_speed # Isso pode duplicar o movimento, remover ou ajustar
-                    # p.pos[1] += (target_pos.y - p.pos[1]) * reconstruction_speed
-                    # p.pos[2] += (target_pos.z - p.pos[2]) * reconstruction_speed
-
-
-                else:
-                    # Chegou ao destino, travar na posição original
-                    p.pos[0] = target_pos.x
-                    p.pos[1] = target_pos.y
-                    p.pos[2] = target_pos.z
-                    p.ativa = False # Desativa a partícula quando ela chega ao destino
-            
             if all_reconstructed:
-                self.estado_particulas = 0 # Volta para o estado parado/objeto se todas reconstruíram
-
+                self.estado_particulas = 0
+                for i, v in enumerate(self.vertices):
+                    original_pos = self.original_vertices_positions[i]
+                    v.set(original_pos.x, original_pos.y, original_pos.z)
 
     def DesenhaParticulas(self):
         glColor3f(0, 0, 0)
