@@ -156,8 +156,8 @@ class Objeto3D:
             p.vel = [0.0, 0.0, 0.0] # Zera a velocidade
             p.ativa = False # Desativa as partículas
 
-    def AtualizaParticulas(self, dt): # dt é passado como argumento
-        GRAVIDADE = -19.8 # Aumentado para uma queda mais rápida. Ajuste se necessário.
+    def AtualizaParticulas(self, dt):
+        GRAVIDADE = -19.8 # Aumentado para uma queda mais rápida
 
         if self.estado_particulas == 1: # Caindo
             for p in self.particulas:
@@ -176,8 +176,7 @@ class Objeto3D:
                         p.ativa = False
                         p.vel = [0.0, 0.0, 0.0]
 
-        elif self.estado_particulas == 2: # Reconstruindo (com interpolação corrigida)
-            # --- Parâmetros para ajustar o efeito ---
+        elif self.estado_particulas == 2: # Reconstruindo
             reconstruction_speed = 0.05  # Velocidade da interpolação (mais alto = mais rápido)
             spiral_speed = 5.0         # Velocidade da rotação da espiral
 
@@ -200,15 +199,14 @@ class Objeto3D:
 
                 all_reconstructed = False
 
-                # --- Interpolação de Altura (Y) e Raio (XZ) ---
-                # Esta parte garante que a forma geral (altura/largura) será correta.
+                # Interpolação de Altura (Y) e Raio (XZ)
                 p.pos[1] = p.pos[1] * (1 - reconstruction_speed) + target_pos.y * reconstruction_speed
 
                 current_r = math.hypot(current_pos_vec[0], current_pos_vec[2])
                 target_r = math.hypot(target_pos.x, target_pos.z)
                 new_r = current_r * (1 - reconstruction_speed) + target_r * reconstruction_speed
 
-                # --- Cálculo de Ângulo (a correção principal) ---
+                # Cálculo de Ângulo
                 current_angle = math.atan2(current_pos_vec[2], current_pos_vec[0])
                 target_angle = math.atan2(target_pos.z, target_pos.x)
 
@@ -223,7 +221,7 @@ class Objeto3D:
                 # O novo ângulo combina a correção com a espiral
                 new_angle = current_angle + angle_correction + angle_spiral
 
-                # --- Atualiza a posição XZ com base no novo raio e ângulo ---
+                # Atualiza a posição XZ com base no novo raio e ângulo
                 p.pos[0] = new_r * math.cos(new_angle)
                 p.pos[2] = new_r * math.sin(new_angle)
 
