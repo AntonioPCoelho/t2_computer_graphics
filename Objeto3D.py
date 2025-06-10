@@ -19,6 +19,7 @@ class Objeto3D:
         self.particulas = []
         self.estado_particulas = 0 # 0: parado/objeto inteiro, 1: caindo, 2: reconstruindo
         self.original_vertices_positions = [] # Para armazenar as posições originais dos vértices
+        self.morph_target_positions = []
         pass
 
     def LoadFile(self, file:str):
@@ -143,8 +144,9 @@ class Objeto3D:
 
     def ResetState(self): # Novo método para resetar o objeto para seu estado inicial
         self.estado_particulas = 0 # Define o estado como objeto inteiro
-        # Para um reset limpo, garantimos que as partículas estejam na posição dos vértices originais
-        # e inativas, e que a lista de partículas exista.
+        self.morph_target_positions.clear()
+        # Para um reset bem bonitinho, garantimos que as partículas fiquem na posição dos vértices originais
+        # Inativas e também garante que a lista de partículas existe
         if not self.particulas or len(self.particulas) != len(self.vertices):
             self.particulas = []
             for v in self.vertices:
@@ -230,15 +232,83 @@ class Objeto3D:
                 for i, v in enumerate(self.vertices):
                     original_pos = self.original_vertices_positions[i]
                     v.set(original_pos.x, original_pos.y, original_pos.z)
+        elif self.estado_particulas == 3: # Morphing to Maurer Rose
+            morph_speed = 0.03 # Adjust for desired morphing speed
+            
+            all_morphed = True
+            for i, p in enumerate(self.particulas):
+                if not p.ativa:
+                    continue
+
+                target_pos = self.morph_target_positions[i]
+                
+                # Calculate distance to see if we've arrived
+                distance = math.sqrt((target_pos[0] - p.pos[0])**2 +
+                                     (target_pos[1] - p.pos[1])**2 +
+                                     (target_pos[2] - p.pos[2])**2)
+
+                if distance > 0.02:
+                    all_morphed = False
+                    # Linearly interpolate each coordinate towards the target
+                    p.pos[0] = p.pos[0] * (1 - morph_speed) + target_pos[0] * morph_speed
+                    p.pos[1] = p.pos[1] * (1 - morph_speed) + target_pos[1] * morph_speed
+                    p.pos[2] = p.pos[2] * (1 - morph_speed) + target_pos[2] * morph_speed
+
+            if all_morphed:
+                print("Transformação completa.")
+                self.estado_particulas = 4 # New state: "Morphed"
+        
+        elif self.estado_particulas == 4: # Morphed state
+            # Do nothing, just hold the particles in place
+            pass
 
     def DesenhaParticulas(self):
-        glColor3f(0, 0, 0)
+        # Change the color based on the current state
+        if self.estado_particulas == 3 or self.estado_particulas == 4:
+            glColor3f(1.0, 0.0, 0.0) # Vermeio
+        else:
+            glColor3f(0.0, 0.0, 0.0) # Preto
+
         glPointSize(6)
         glBegin(GL_POINTS)
         for p in self.particulas:
-            if p.ativa or self.estado_particulas == 2: # Desenha todas se estiver reconstruindo
+            if p.ativa: 
                 glVertex3f(p.pos[0], p.pos[1], p.pos[2])
         glEnd()
+
+    def ActivateMorphToMaurerRose(self, n=5, d=97, scale=2.5):
+        """Calculates Maurer Rose target points and activates the morphing state."""
+        # Permite a transformação a partir do estado inicial (0) ou durante/após a reconstrução (2)
+        if self.estado_particulas not in [0, 2]:
+            print("O objeto precisa estar reconstruído ou em reconstrução para se transformar.")
+            return
+
+        print("Ativando a transformação para Rosa de Maurer.")
+        self.morph_target_positions.clear()
+
+        # Se estiver começando do estado sólido (0), as partículas precisam ser ativadas nas posições dos vértices.
+        if self.estado_particulas == 0:
+            for i, v in enumerate(self.original_vertices_positions):
+                self.particulas[i].pos = [v.x, v.y, v.z]
+                self.particulas[i].ativa = True
+        
+        # Se o estado for 2, as partículas já estão ativas e em movimento, então apenas damos a elas um novo alvo.
+
+        # Generate target positions on the Maurer Rose curve
+        total_steps = len(self.vertices)
+        for i in range(total_steps):
+            theta_degrees = (i / total_steps) * 360 * d
+            k = theta_degrees * math.pi / 180
+            r = scale * math.sin(n * k)
+            
+            # We map the 2D rose onto the XZ plane to match the floor
+            x = r * math.cos(k)
+            y = 0.5 # Lift the shape slightly above the floor
+            z = r * math.sin(k)
+            self.morph_target_positions.append([x, y, z])
+        
+        # Set the state to morphing
+        self.estado_particulas = 3
 
 
 class Particula:
