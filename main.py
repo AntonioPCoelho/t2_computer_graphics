@@ -16,7 +16,6 @@ focalPoint = [0.0, 0.0, 0.0]
 vup = [0.0, 1.0, 2.0]
 
 CAM_STEP = 0.5
-CAMERA_ROTATION_SPEED = 0.5
 
 current_animation_mode = "NORMAL"
 animation_speed_multiplier = 1.0
@@ -89,7 +88,6 @@ def reshape(w, h):
     glLoadIdentity()
     AtualizaCamera()
 
-# --- FUNÇÕES DO PISO RESTAURADAS PARA AS ORIGINAIS ---
 def DesenhaLadrilho():
     glColor3f(0.5, 0.5, 0.5)
     glBegin(GL_QUADS)
