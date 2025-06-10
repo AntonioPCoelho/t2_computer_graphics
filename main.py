@@ -1,234 +1,318 @@
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from OpenGL.GL import *
+from Ponto import *
 
-import sys
-import time
+import random
+import math
 
-from Objeto3D import *
+class Objeto3D:
 
-o: Objeto3D
-tempo_antes = time.time()
-soma_dt = 0
+    def __init__(self):
+        self.vertices = []
+        self.faces    = []
+        self.speed    = []
+        self.angle    = []
+        self.radius   = []
+        self.position = Ponto(0,0,0)
+        self.rotation = (0,0,0,0)
+        self.particulas = []
+        self.estado_particulas = 0 # 0: parado/objeto inteiro, 1: caindo, 2: reconstruindo
+        self.original_vertices_positions = [] # Para armazenar as posições originais dos vértices
+        self.morph_target_positions = []
+        pass
 
-eyeO = [0.0, 2.0, 8.0]
-focalPoint = [0.0, 0.0, 0.0]
-vup = [0.0, 1.0, 2.0]
+    def LoadFile(self, file:str):
+        f = open(file, "r")
 
-CAM_STEP = 0.5
-CAMERA_ROTATION_SPEED = 0.5
+        # leitor de .obj baseado na descrição em https://en.wikipedia.org/wiki/Wavefront_.obj_file
+        for line in f:
+            values = line.split(' ')
+            # dividimos a linha por ' ' e usamos o primeiro elemento para saber que tipo de item temos
 
-current_animation_mode = "NORMAL"
-animation_speed_multiplier = 1.0
+            if values[0] == 'v':
+                # item é um vértice, os outros elementos da linha são a posição dele
+                p = Ponto(float(values[1]),
+                          float(values[2]),
+                          float(values[3]))
+                self.vertices.append(p)
+                self.original_vertices_positions.append(Ponto(p.x, p.y, p.z)) # Armazena a posição original
+                self.speed.append((random.random() + 0.1))
 
-def AtualizaCamera():
-    glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
-    gluLookAt(eyeO[0], eyeO[1], eyeO[2],
-              focalPoint[0], focalPoint[1], focalPoint[2],
-              vup[0],   vup[1],   vup[2])
 
-def reset_to_initial_state():
-    global o, current_animation_mode, animation_speed_multiplier
-    o.ResetState()
-    current_animation_mode = "PAUSED"
-    animation_speed_multiplier = 1.0
-    print("Estado resetado para inicial. Animação Pausada.")
+                self.angle.append(math.atan2(float(values[3]), float(values[1])))
+                self.radius.append(math.hypot(float(values[1]), float(values[3])))
 
-def init():
-    global o
-    glClearColor(0.5, 0.5, 0.9, 1.0)
-    glClearDepth(1.0)
-    glDepthFunc(GL_LESS)
-    glEnable(GL_DEPTH_TEST)
-    glEnable(GL_CULL_FACE)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-    o = Objeto3D()
-    o.LoadFile('Human_Head.obj')
+            if values[0] == 'f':
+                # item é uma face, os outros elementos da linha são dados sobre os vértices dela
+                self.faces.append([])
+                for fVertex in values[1:]:
+                    fInfo = fVertex.split('/')
+                    # dividimos cada elemento por '/'
+                    self.faces[-1].append(int(fInfo[0]) - 1) # primeiro elemento é índice do vértice da face
+                    # ignoramos textura e normal
 
-    DefineLuz()
-    PosicUser()
-    reset_to_initial_state()
+            # ignoramos outros tipos de items, no exercício não é necessário e vai só complicar mais
+        pass
 
-def DefineLuz():
-    luz_ambiente = [0.4, 0.4, 0.4]
-    luz_difusa = [0.7, 0.7, 0.7]
-    luz_especular = [0.9, 0.9, 0.9]
-    posicao_luz = [2.0, 3.0, 0.0]
-    especularidade = [1.0, 1.0, 1.0]
-
-    glEnable(GL_COLOR_MATERIAL)
-    glEnable(GL_LIGHTING)
-    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, luz_ambiente)
-    glLightfv(GL_LIGHT0, GL_AMBIENT, luz_ambiente)
-    glLightfv(GL_LIGHT0, GL_DIFFUSE, luz_difusa)
-    glLightfv(GL_LIGHT0, GL_SPECULAR, luz_especular)
-    glLightfv(GL_LIGHT0, GL_POSITION, posicao_luz)
-    glEnable(GL_LIGHT0)
-    glEnable(GL_COLOR_MATERIAL)
-    glMaterialfv(GL_FRONT, GL_SPECULAR, especularidade)
-    glMateriali(GL_FRONT, GL_SHININESS, 51)
-
-def PosicUser():
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluPerspective(60, 16/9, 0.01, 50)
-    glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
-    AtualizaCamera()
-
-def reshape(w, h):
-    if h == 0: h = 1
-    aspect = w / h
-    glViewport(0, 0, w, h)
-    glMatrixMode(GL_PROJECTION)
-    glLoadIdentity()
-    gluPerspective(60.0, aspect, 0.01, 50.0)
-    glMatrixMode(GL_MODELVIEW)
-    glLoadIdentity()
-    AtualizaCamera()
-
-# --- FUNÇÕES DO PISO RESTAURADAS PARA AS ORIGINAIS ---
-def DesenhaLadrilho():
-    glColor3f(0.5, 0.5, 0.5)
-    glBegin(GL_QUADS)
-    glNormal3f(0, 1, 0)
-    glVertex3f(-0.5, 0.0, -0.5)
-    glVertex3f(-0.5, 0.0, 0.5)
-    glVertex3f(0.5, 0.0, 0.5)
-    glVertex3f(0.5, 0.0, -0.5)
-    glEnd()
-
-    glColor3f(1, 1, 1)
-    glBegin(GL_LINE_STRIP)
-    glNormal3f(0, 1, 0)
-    glVertex3f(-0.5, 0.0, -0.5)
-    glVertex3f(-0.5, 0.0, 0.5)
-    glVertex3f(0.5, 0.0, 0.5)
-    glVertex3f(0.5, 0.0, -0.5)
-    glEnd()
-
-def DesenhaPiso():
-    glPushMatrix()
-    glTranslated(-20, -1, -10)
-    for x in range(-20, 20):
+    def DesenhaVertices(self):
         glPushMatrix()
-        for z in range(-20, 20):
-            DesenhaLadrilho()
-            glTranslated(0, 0, 1)
+        glTranslatef(self.position.x, self.position.y, self.position.z)
+        glRotatef(self.rotation[3], self.rotation[0], self.rotation[1], self.rotation[2])
+        glColor3f(.0, .0, .0)
+        glPointSize(8)
+
+        for v in self.vertices:
+            glPushMatrix()
+            glTranslate(v.x, v.y, v.z)
+            glutSolidSphere(.05, 20, 20)
+            glPopMatrix()
+
         glPopMatrix()
-        glTranslated(1, 0, 0)
-    glPopMatrix()
+        pass
+
+    def DesenhaWireframe(self):
+        glPushMatrix()
+        glTranslatef(self.position.x, self.position.y, self.position.z)
+        glRotatef(self.rotation[3], self.rotation[0], self.rotation[1], self.rotation[2])
+        glColor3f(0, 0, 0)
+        glLineWidth(2)
+
+        for f in self.faces:
+            glBegin(GL_LINE_LOOP)
+            for iv in f:
+                v = self.vertices[iv]
+                glVertex(v.x, v.y, v.z)
+            glEnd()
+
+        glPopMatrix()
+        pass
+
+    def Desenha(self):
+        glPushMatrix()
+        glTranslatef(self.position.x, self.position.y, self.position.z)
+        glRotatef(self.rotation[3], self.rotation[0], self.rotation[1], self.rotation[2])
+        glColor3f(0.34, .34, .34)
+        glLineWidth(2)
+
+        for f in self.faces:
+            glBegin(GL_TRIANGLE_FAN)
+            for iv in f:
+                v = self.vertices[iv]
+                glVertex(v.x, v.y, v.z)
+            glEnd()
+
+        glPopMatrix()
+        pass
+
+    def ProximaPos(self):
+        # Este método não é usado no fluxo de partículas, mas pode ser útil para outras animações
+        for i in range(len(self.vertices)):
+            self.angle[i] += self.speed[i] * (1/30)
+
+            x = self.radius[i] * math.cos(self.angle[i])
+            z = self.radius[i] * math.sin(self.angle[i])
+
+            self.vertices[i].x = x
+            self.vertices[i].z = z
+
+    def AtivarParticulas(self):
+        # Se as partículas ainda não foram criadas ou se queremos reiniciá-las completamente
+        if not self.particulas or len(self.particulas) != len(self.vertices):
+            self.particulas = []
+            for v in self.vertices:
+                self.particulas.append(Particula(v))
+
+        # Define uma altura inicial fixa para todas as partículas, bem acima do chão.
+        fixed_spawn_height = 3.0 # Ajuste este valor. O chão está em -1.0.
+        for i, p in enumerate(self.particulas):
+             original_v_pos = self.original_vertices_positions[i]
+             # Define a posição inicial da partícula: XZ original, Y fixo e alto.
+             p.pos = [original_v_pos.x, fixed_spawn_height, original_v_pos.z]
+             p.vel = [random.uniform(-1, 1), random.uniform(2, 5), random.uniform(-1, 1)] # Redefine a velocidade para iniciar a queda
+             p.ativa = True # Garante que todas as partículas estejam ativas para começar a cair.
+
+        self.estado_particulas = 1 # Define o estado como caindo
 
 
-def Animacao():
-    global soma_dt, tempo_antes, current_animation_mode, animation_speed_multiplier
+    def ReconstruirParticulas(self):
+        self.estado_particulas = 2 # Define o estado como reconstruindo
+        for i, p in enumerate(self.particulas):
+            p.ativa = True # Ativa todas as partículas para a reconstrução
+            p.vel = [0, 0, 0] # Zera a velocidade para o início da simulação de reconstrução
 
-    tempo_agora = time.time()
-    delta_time = tempo_agora - tempo_antes
-    tempo_antes = tempo_agora
+    def ResetState(self): # Novo método para resetar o objeto para seu estado inicial
+        self.estado_particulas = 0 # Define o estado como objeto inteiro
+        self.morph_target_positions.clear()
+        # Para um reset bem bonitinho, garantimos que as partículas fiquem na posição dos vértices originais
+        # Inativas e também garante que a lista de partículas existe
+        if not self.particulas or len(self.particulas) != len(self.vertices):
+            self.particulas = []
+            for v in self.vertices:
+                self.particulas.append(Particula(v))
 
-    # Verifica o modo de animação atual
-    if current_animation_mode == "PAUSED":
-        glutPostRedisplay() # Redesenha a tela, mas não atualiza a animação
-        return
+        for i, p in enumerate(self.particulas):
+            original_v_pos = self.original_vertices_positions[i]
+            p.pos = [original_v_pos.x, original_v_pos.y, original_v_pos.z] # Volta para a posição original
+            p.vel = [0.0, 0.0, 0.0] # Zera a velocidade
+            p.ativa = False # Desativa as partículas
 
-    effective_dt = delta_time * animation_speed_multiplier
-    soma_dt += effective_dt
+    def AtualizaParticulas(self, dt):
+        GRAVIDADE = -19.8 # Aumentado para uma queda mais rápida
 
-    if soma_dt > 1.0 / 60: # Aproximadamente 60 FPS
-        soma_dt = 0
-        if o.estado_particulas in [1, 2, 3]: # Caindo, Reconstruindo ou Morfando
-            o.AtualizaParticulas(effective_dt)
+        if self.estado_particulas == 1: # Caindo
+            for p in self.particulas:
+                if not p.ativa:
+                    continue
+                # Aplicar gravidade
+                p.vel[1] += GRAVIDADE * dt
+                # Atualizar posição
+                for i in range(3):
+                    p.pos[i] += p.vel[i] * dt
+                # Colisão com o chão (y = -1.0)
+                if p.pos[1] <= -1.0:
+                    p.pos[1] = -1.0
+                    p.vel[1] *= -0.5  # quique
+                    if abs(p.vel[1]) < 0.05:
+                        p.ativa = False
+                        p.vel = [0.0, 0.0, 0.0]
+
+        elif self.estado_particulas == 2: # Reconstruindo
+            reconstruction_speed = 0.05  # Velocidade da interpolação (mais alto = mais rápido)
+            spiral_speed = 5.0         # Velocidade da rotação da espiral
+
+            all_reconstructed = True
+            for i, p in enumerate(self.particulas):
+                if not p.ativa:
+                    continue
+
+                target_pos = self.original_vertices_positions[i]
+                current_pos_vec = p.pos
+
+                distance = math.sqrt((target_pos.x - current_pos_vec[0])**2 +
+                                     (target_pos.y - current_pos_vec[1])**2 +
+                                     (target_pos.z - current_pos_vec[2])**2)
+
+                if distance < 0.01:
+                    p.pos = [target_pos.x, target_pos.y, target_pos.z]
+                    p.ativa = False
+                    continue
+
+                all_reconstructed = False
+
+                # Interpolação de Altura (Y) e Raio (XZ)
+                p.pos[1] = p.pos[1] * (1 - reconstruction_speed) + target_pos.y * reconstruction_speed
+
+                current_r = math.hypot(current_pos_vec[0], current_pos_vec[2])
+                target_r = math.hypot(target_pos.x, target_pos.z)
+                new_r = current_r * (1 - reconstruction_speed) + target_r * reconstruction_speed
+
+                # Cálculo de Ângulo
+                current_angle = math.atan2(current_pos_vec[2], current_pos_vec[0])
+                target_angle = math.atan2(target_pos.z, target_pos.x)
+
+                # Calcula a menor distância entre os ângulos (para evitar que ele gire no sentido errado)
+                angle_diff = (target_angle - current_angle + math.pi) % (2 * math.pi) - math.pi
+                
+                # Movimento para corrigir a direção
+                angle_correction = angle_diff * reconstruction_speed
+                # Movimento constante da espiral
+                angle_spiral = dt * spiral_speed
+                
+                # O novo ângulo combina a correção com a espiral
+                new_angle = current_angle + angle_correction + angle_spiral
+
+                # Atualiza a posição XZ com base no novo raio e ângulo
+                p.pos[0] = new_r * math.cos(new_angle)
+                p.pos[2] = new_r * math.sin(new_angle)
+
+            if all_reconstructed:
+                self.estado_particulas = 0
+                for i, v in enumerate(self.vertices):
+                    original_pos = self.original_vertices_positions[i]
+                    v.set(original_pos.x, original_pos.y, original_pos.z)
+        elif self.estado_particulas == 3: # Morphing to Maurer Rose
+            morph_speed = 0.03 # Adjust for desired morphing speed
+            
+            all_morphed = True
+            for i, p in enumerate(self.particulas):
+                if not p.ativa:
+                    continue
+
+                target_pos = self.morph_target_positions[i]
+                
+                # Calculate distance to see if we've arrived
+                distance = math.sqrt((target_pos[0] - p.pos[0])**2 +
+                                     (target_pos[1] - p.pos[1])**2 +
+                                     (target_pos[2] - p.pos[2])**2)
+
+                if distance > 0.02:
+                    all_morphed = False
+                    # Linearly interpolate each coordinate towards the target
+                    p.pos[0] = p.pos[0] * (1 - morph_speed) + target_pos[0] * morph_speed
+                    p.pos[1] = p.pos[1] * (1 - morph_speed) + target_pos[1] * morph_speed
+                    p.pos[2] = p.pos[2] * (1 - morph_speed) + target_pos[2] * morph_speed
+
+            if all_morphed:
+                print("Transformação completa.")
+                self.estado_particulas = 4 # New state: "Morphed"
         
-    glutPostRedisplay()
+        elif self.estado_particulas == 4: # Morphed state
+            # Do nothing, just hold the particles in place
+            pass
 
-def desenha():
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    glMatrixMode(GL_MODELVIEW)
-
-    DesenhaPiso()
-    
-    if o.estado_particulas == 0: # Objeto inteiro
-        o.DesenhaVertices() # Desenha o objeto como vértices (pontos)
-    else: # Caindo, Reconstruindo ou morfando
-        o.DesenhaParticulas()
-        
-    glutSwapBuffers()
-
-def teclado(key, x, y):
-    global eyeO, focalPoint, vup, current_animation_mode, animation_speed_multiplier
-
-    mod = glutGetModifiers()
-    step = CAM_STEP * (1 if not (mod & GLUT_ACTIVE_SHIFT) else -1)
-    if key == b'1':    eyeO[0] += step
-    elif key == b'2':  eyeO[1] += step
-    elif key == b'3':  eyeO[2] += step
-    elif key == b'4':  focalPoint[0] += step
-    elif key == b'5':  focalPoint[1] += step
-    elif key == b'6':  focalPoint[2] += step
-    elif key == b'7':  vup[0], vup[1] = vup[1], -vup[0]
-    elif key == b'\x1b': glutLeaveMainLoop() # ESC para sair
-
-    elif key == b'!': eyeO[0]   -= CAM_STEP
-    elif key == b'@': eyeO[1]   -= CAM_STEP
-    elif key == b'#': eyeO[2]   -= CAM_STEP
-    elif key == b'$': focalPoint[0] -= CAM_STEP
-    elif key == b'%': focalPoint[1] -= CAM_STEP
-    elif key == b'^': focalPoint[2] -= CAM_STEP
-    elif key == b'&': vup[0], vup[1] = -vup[1], vup[0]
-
-    elif key == b' ': # Play/Pause
-        if current_animation_mode != "PAUSED":
-            current_animation_mode = "PAUSED"
-            print(f"Modo de animação: {current_animation_mode}")
+    def DesenhaParticulas(self):
+        # Change the color based on the current state
+        if self.estado_particulas == 3 or self.estado_particulas == 4:
+            glColor3f(1.0, 0.0, 0.0) # Vermeio
         else:
-            current_animation_mode = "NORMAL"
-            animation_speed_multiplier = 1.0
-            print(f"Modo de animação: {current_animation_mode}")
+            glColor3f(0.0, 0.0, 0.0) # Preto
 
-    elif key == b'[': # Rewind (Reset)
-        reset_to_initial_state()
-        print("Animação resetada.")
+        glPointSize(6)
+        glBegin(GL_POINTS)
+        for p in self.particulas:
+            if p.ativa: 
+                glVertex3f(p.pos[0], p.pos[1], p.pos[2])
+        glEnd()
 
-    elif key == b']': # Fast Forward
-        current_animation_mode = "FAST_FORWARD"
-        animation_speed_multiplier = 3.0
-        print(f"Modo de animação: {current_animation_mode} ({animation_speed_multiplier}x)")
+    def ActivateMorphToMaurerRose(self, n=5, d=97, scale=2.5):
+        """Calculates Maurer Rose target points and activates the morphing state."""
+        # Permite a transformação a partir do estado inicial (0) ou durante/após a reconstrução (2)
+        if self.estado_particulas not in [0, 2]:
+            print("O objeto precisa estar reconstruído ou em reconstrução para se transformar.")
+            return
 
-    elif key == b'\\': # Velocidade Normal
-        current_animation_mode = "NORMAL"
-        animation_speed_multiplier = 1.0
-        print("Modo de animação: NORMAL")
+        print("Ativando a transformação para Rosa de Maurer.")
+        self.morph_target_positions.clear()
 
-    elif key == b'p': # Ativar Partículas (Explodir)
-        o.AtivarParticulas()
-        current_animation_mode = "NORMAL"
-        animation_speed_multiplier = 1.0
-        print("Estado: Partículas Caindo")
+        # Se estiver começando do estado sólido (0), as partículas precisam ser ativadas nas posições dos vértices.
+        if self.estado_particulas == 0:
+            for i, v in enumerate(self.original_vertices_positions):
+                self.particulas[i].pos = [v.x, v.y, v.z]
+                self.particulas[i].ativa = True
+        
+        # Se o estado for 2, as partículas já estão ativas e em movimento, então apenas damos a elas um novo alvo.
 
-    elif key == b'r': # Reconstruir Objeto
-        o.ReconstruirParticulas()
-        current_animation_mode = "NORMAL"
-        animation_speed_multiplier = 1.0
-        print("Estado: Reconstruindo Objeto")
+        # Generate target positions on the Maurer Rose curve
+        total_steps = len(self.vertices)
+        for i in range(total_steps):
+            theta_degrees = (i / total_steps) * 360 * d
+            k = theta_degrees * math.pi / 180
+            r = scale * math.sin(n * k)
+            
+            # We map the 2D rose onto the XZ plane to match the floor
+            x = r * math.cos(k)
+            y = 0.5 # Lift the shape slightly above the floor
+            z = r * math.sin(k)
+            self.morph_target_positions.append([x, y, z])
+        
+        # Set the state to morphing
+        self.estado_particulas = 3
 
-    AtualizaCamera()
-    glutPostRedisplay()
 
-def main():
-    glutInit(sys.argv)
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH) # Mudei para GLUT_DOUBLE para melhor animação
-    glutInitWindowSize(1280, 720) # Aumentei a resolução da janela
-    glutInitWindowPosition(100, 100)
-    glutCreateWindow(b'Computacao Grafica - Particulas')
-    init()
-    glutDisplayFunc(desenha)
-    glutKeyboardFunc(teclado)
-    glutIdleFunc(Animacao)
-    glutReshapeFunc(reshape)
-    glutMainLoop()
-
-if __name__ == '__main__':
-    main()
+class Particula:
+    def __init__(self, ponto):
+        self.pos = [ponto.x, ponto.y, ponto.z]
+        self.vel = [random.uniform(-1, 1), random.uniform(2, 5), random.uniform(-1, 1)]
+        self.ativa = True
