@@ -222,8 +222,8 @@ def teclado(key, x, y):
 
 def main():
     glutInit(sys.argv)
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH) # Mudei para GLUT_DOUBLE para melhor animação
-    glutInitWindowSize(1280, 720) # Aumentei a resolução da janela
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH) 
+    glutInitWindowSize(400, 400) 
     glutInitWindowPosition(100, 100)
     glutCreateWindow(b'Computacao Grafica - Particulas')
     init()
