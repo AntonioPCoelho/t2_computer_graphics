@@ -127,15 +127,14 @@ def Animacao():
     delta_time = tempo_agora - tempo_antes
     tempo_antes = tempo_agora
 
-    # Verifica o modo de animação atual
     if current_animation_mode == "PAUSED":
-        glutPostRedisplay() # Redesenha a tela, mas não atualiza a animação
+        glutPostRedisplay() 
         return
 
     effective_dt = delta_time * animation_speed_multiplier
     soma_dt += effective_dt
 
-    if soma_dt > 1.0 / 60: # Aproximadamente 60 FPS
+    if soma_dt > 1.0 / 60: 
         soma_dt = 0
         if o.estado_particulas in [1, 2, 3]: # Caindo, Reconstruindo ou Morfando
             o.AtualizaParticulas(effective_dt)
@@ -150,7 +149,7 @@ def desenha():
     
     if o.estado_particulas == 0: # Objeto inteiro
         o.DesenhaVertices() # Desenha o objeto como vértices (pontos)
-    else: # Caindo, Reconstruindo ou morfando
+    else: 
         o.DesenhaParticulas()
         
     glutSwapBuffers()
